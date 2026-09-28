@@ -1,6 +1,6 @@
+import argparse
 import getpass
 import socket
-import sys
 
 
 def get_prompt():
@@ -27,9 +27,11 @@ def execute(command, args):
 
 
 def parse_args():
-    vfs_path = sys.argv[1] if len(sys.argv) > 1 else None
-    script_path = sys.argv[2] if len(sys.argv) > 2 else None
-    return vfs_path, script_path
+    parser = argparse.ArgumentParser()
+    parser.add_argument("vfs_path", nargs="?")
+    parser.add_argument("script_path", nargs="?")
+    args = parser.parse_args()
+    return args.vfs_path, args.script_path
 
 
 def print_debug(vfs_path, script_path):
