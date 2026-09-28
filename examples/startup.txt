@@ -1,0 +1,4 @@
+ls -la /home
+cd Documents
+unknown_command
+exit
