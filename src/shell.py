@@ -7,10 +7,11 @@ import socket
 VFS_HEADER = ["path", "type", "content"]
 
 
-def get_prompt():
+def get_prompt(cwd):
     user = getpass.getuser()
     host = socket.gethostname().split(".")[0]
-    return f"{user}@{host}:~$ "
+    location = cwd if cwd else "~"
+    return f"{user}@{host}:{location}$ "
 
 
 def parse_line(line):
@@ -57,13 +58,133 @@ def save_vfs(vfs, path):
             writer.writerow([node_path, node["type"], encoded])
 
 
-def execute(command, args, vfs):
+def resolve_path(cwd, arg):
+    if not arg or arg == ".":
+        base = cwd
+    elif arg.startswith("/"):
+        base = arg
+    else:
+        base = cwd.rstrip("/") + "/" + arg
+
+    parts = []
+    for part in base.split("/"):
+        if part == "" or part == ".":
+            continue
+        if part == "..":
+            if parts:
+                parts.pop()
+            continue
+        parts.append(part)
+
+    if not parts:
+        return "/"
+    return "/" + "/".join(parts)
+
+
+def vfs_children(vfs, dir_path):
+    children = []
+    for node_path in vfs:
+        if node_path == dir_path:
+            continue
+        parent = node_path.rsplit("/", 1)[0]
+        if parent == "":
+            parent = "/"
+        if parent == dir_path:
+            children.append(node_path)
+    return sorted(children)
+
+
+def ls_command(vfs, cwd, args):
+    if vfs is None:
+        return "ls: VFS не загружена"
+
+    target_path = resolve_path(cwd, args[0]) if args else cwd
+    if target_path not in vfs:
+        return f"ls: путь не найден: {target_path}"
+
+    node = vfs[target_path]
+    if node["type"] == "file":
+        return target_path.rsplit("/", 1)[-1]
+
+    children = vfs_children(vfs, target_path)
+    names = [child.rsplit("/", 1)[-1] for child in children]
+    return " ".join(names)
+
+
+def cd_command(vfs, state, args):
+    if vfs is None:
+        return "cd: VFS не загружена"
+
+    target_path = resolve_path(state["cwd"], args[0]) if args else "/"
+    if target_path not in vfs:
+        return f"cd: путь не найден: {target_path}"
+
+    node = vfs[target_path]
+    if node["type"] != "dir":
+        return f"cd: не каталог: {target_path}"
+
+    state["cwd"] = target_path
+    return None
+
+
+def rev_command(vfs, cwd, args):
+    if vfs is None:
+        return "rev: VFS не загружена"
+    if not args:
+        return "rev: укажите путь к файлу"
+
+    target_path = resolve_path(cwd, args[0])
+    if target_path not in vfs:
+        return f"rev: путь не найден: {target_path}"
+
+    node = vfs[target_path]
+    if node["type"] != "file":
+        return f"rev: не файл: {target_path}"
+
+    text = node["content"].decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    reversed_lines = [line[::-1] for line in lines]
+    return "\n".join(reversed_lines)
+
+
+def tree_lines(vfs, path, prefix):
+    children = vfs_children(vfs, path)
+    lines = []
+    for index, child_path in enumerate(children):
+        is_last = index == len(children) - 1
+        connector = "└── " if is_last else "├── "
+        name = child_path.rsplit("/", 1)[-1]
+        lines.append(prefix + connector + name)
+        if vfs[child_path]["type"] == "dir":
+            extension = "    " if is_last else "│   "
+            lines.extend(tree_lines(vfs, child_path, prefix + extension))
+    return lines
+
+
+def tree_command(vfs, cwd, args):
+    if vfs is None:
+        return "tree: VFS не загружена"
+
+    target_path = resolve_path(cwd, args[0]) if args else cwd
+    if target_path not in vfs:
+        return f"tree: путь не найден: {target_path}"
+
+    lines = [target_path]
+    lines.extend(tree_lines(vfs, target_path, ""))
+    return "\n".join(lines)
+
+
+def execute(command, args, vfs, state):
     if command == "":
         return None
     if command == "ls":
-        return f"ls: аргументы = {args}"
+        return ls_command(vfs, state["cwd"], args)
     if command == "cd":
-        return f"cd: аргументы = {args}"
+        return cd_command(vfs, state, args)
+    if command == "rev":
+        return rev_command(vfs, state["cwd"], args)
+    if command == "tree":
+        return tree_command(vfs, state["cwd"], args)
     if command == "vfs-save":
         if not args:
             return "vfs-save: укажите путь для сохранения"
@@ -87,7 +208,7 @@ def print_debug(vfs_path, script_path):
     print(f"путь к стартовому скрипту: {script_path}")
 
 
-def run_script(path, vfs):
+def run_script(path, vfs, state):
     try:
         with open(path, encoding="utf-8") as script_file:
             lines = script_file.readlines()
@@ -97,23 +218,23 @@ def run_script(path, vfs):
 
     for line in lines:
         line = line.rstrip("\n")
-        print(get_prompt() + line)
+        print(get_prompt(state["cwd"]) + line)
 
         command, args = parse_line(line)
         if command == "exit":
             return True
 
-        result = execute(command, args, vfs)
+        result = execute(command, args, vfs, state)
         if result is not None:
             print(result)
 
     return False
 
 
-def run_repl(vfs):
+def run_repl(vfs, state):
     while True:
         try:
-            line = input(get_prompt())
+            line = input(get_prompt(state["cwd"]))
         except EOFError:
             print()
             break
@@ -123,7 +244,7 @@ def run_repl(vfs):
         if command == "exit":
             break
 
-        result = execute(command, args, vfs)
+        result = execute(command, args, vfs, state)
         if result is not None:
             print(result)
 
@@ -133,13 +254,14 @@ def main():
     print_debug(vfs_path, script_path)
 
     vfs = load_vfs(vfs_path) if vfs_path else None
+    state = {"cwd": "/"}
 
     exited = False
     if script_path:
-        exited = run_script(script_path, vfs)
+        exited = run_script(script_path, vfs, state)
 
     if not exited:
-        run_repl(vfs)
+        run_repl(vfs, state)
 
 
 if __name__ == "__main__":

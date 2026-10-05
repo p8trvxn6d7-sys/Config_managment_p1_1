@@ -6,7 +6,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from shell import execute, load_vfs, parse_line, save_vfs
+from shell import (
+    execute,
+    load_vfs,
+    parse_line,
+    resolve_path,
+    save_vfs,
+)
+
+
+def make_sample_vfs():
+    return {
+        "/": {"type": "dir", "content": b""},
+        "/docs": {"type": "dir", "content": b""},
+        "/docs/readme.txt": {"type": "file", "content": b"hello\nworld\n"},
+        "/docs/reports": {"type": "dir", "content": b""},
+        "/docs/reports/2026": {"type": "dir", "content": b""},
+        "/docs/reports/2026/summary.txt": {"type": "file", "content": b"ok"},
+        "/top.txt": {"type": "file", "content": b"top"},
+    }
 
 
 def test_parse_line():
@@ -21,20 +39,71 @@ def test_parse_line_empty():
     assert args == []
 
 
-def test_execute_ls():
-    result = execute("ls", ["-la"], None)
-    assert "ls" in result
-    assert "-la" in result
+def test_resolve_path_absolute():
+    assert resolve_path("/docs", "/top.txt") == "/top.txt"
 
 
-def test_execute_cd():
-    result = execute("cd", ["Documents"], None)
-    assert "cd" in result
-    assert "Documents" in result
+def test_resolve_path_relative():
+    assert resolve_path("/docs", "reports") == "/docs/reports"
+
+
+def test_resolve_path_dotdot():
+    assert resolve_path("/docs/reports", "..") == "/docs"
+
+
+def test_resolve_path_root_dotdot():
+    assert resolve_path("/", "..") == "/"
+
+
+def test_execute_ls_lists_children():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    result = execute("ls", [], vfs, state)
+    assert "docs" in result
+    assert "top.txt" in result
+
+
+def test_execute_ls_file():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    result = execute("ls", ["top.txt"], vfs, state)
+    assert result == "top.txt"
+
+
+def test_execute_cd_changes_state():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    result = execute("cd", ["docs"], vfs, state)
+    assert result is None
+    assert state["cwd"] == "/docs"
+
+
+def test_execute_cd_not_found():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    result = execute("cd", ["missing"], vfs, state)
+    assert "не найден" in result
+    assert state["cwd"] == "/"
+
+
+def test_execute_rev():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/docs"}
+    result = execute("rev", ["readme.txt"], vfs, state)
+    assert result == "olleh\ndlrow"
+
+
+def test_execute_tree():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    result = execute("tree", [], vfs, state)
+    assert "docs" in result
+    assert "reports" in result
+    assert "summary.txt" in result
 
 
 def test_execute_unknown():
-    result = execute("blabla", [], None)
+    result = execute("blabla", [], None, {"cwd": "/"})
     assert "не найдена" in result
 
 
@@ -85,12 +154,12 @@ def test_vfs_save_roundtrip():
 
 
 def test_execute_vfs_save_no_vfs():
-    result = execute("vfs-save", ["/tmp/out.csv"], None)
+    result = execute("vfs-save", ["/tmp/out.csv"], None, {"cwd": "/"})
     assert "не загружена" in result
 
 
 def test_execute_vfs_save_no_path():
-    result = execute("vfs-save", [], {})
+    result = execute("vfs-save", [], {}, {"cwd": "/"})
     assert "укажите путь" in result
 
 
@@ -98,8 +167,16 @@ if __name__ == "__main__":
     for test in (
         test_parse_line,
         test_parse_line_empty,
-        test_execute_ls,
-        test_execute_cd,
+        test_resolve_path_absolute,
+        test_resolve_path_relative,
+        test_resolve_path_dotdot,
+        test_resolve_path_root_dotdot,
+        test_execute_ls_lists_children,
+        test_execute_ls_file,
+        test_execute_cd_changes_state,
+        test_execute_cd_not_found,
+        test_execute_rev,
+        test_execute_tree,
         test_execute_unknown,
         test_load_vfs_missing_file,
         test_load_vfs_bad_format,

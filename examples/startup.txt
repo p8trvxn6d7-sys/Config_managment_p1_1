@@ -1,4 +1,9 @@
-ls -la /home
-cd Documents
+ls
+cd docs
+ls
 unknown_command
+cd ..
+rev readme.txt
+tree
+vfs-save output/vfs_saved.csv
 exit

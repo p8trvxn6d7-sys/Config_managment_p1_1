@@ -1,0 +1,13 @@
+ls
+cd docs
+ls
+tree
+cd reports/2026
+ls ..
+rev summary.txt
+cd ../../..
+cd missing_dir
+ls missing_dir
+rev missing_dir
+vfs-save output/vfs_saved.csv
+exit
