@@ -59,7 +59,7 @@ def save_vfs(vfs, path):
 
 
 def resolve_path(cwd, arg):
-    if not arg or arg == ".":
+    if arg in ("", "."):
         base = cwd
     elif arg.startswith("/"):
         base = arg
@@ -68,7 +68,7 @@ def resolve_path(cwd, arg):
 
     parts = []
     for part in base.split("/"):
-        if part == "" or part == ".":
+        if part in ("", "."):
             continue
         if part == "..":
             if parts:
@@ -174,6 +174,51 @@ def tree_command(vfs, cwd, args):
     return "\n".join(lines)
 
 
+def vfs_save_command(vfs, args):
+    if not args:
+        return "vfs-save: укажите путь для сохранения"
+    if vfs is None:
+        return "vfs-save: VFS не загружена"
+    save_vfs(vfs, args[0])
+    return f"vfs-save: сохранено в {args[0]}"
+
+
+def touch_command(vfs, cwd, args):
+    if vfs is None:
+        return "touch: VFS не загружена"
+    if not args:
+        return "touch: укажите имя файла"
+
+    target_path = resolve_path(cwd, args[0])
+    if target_path in vfs:
+        return None
+
+    parent = target_path.rsplit("/", 1)[0]
+    if parent == "":
+        parent = "/"
+    if parent not in vfs:
+        return f"touch: каталог не найден: {parent}"
+    if vfs[parent]["type"] != "dir":
+        return f"touch: не каталог: {parent}"
+
+    vfs[target_path] = {"type": "file", "content": b""}
+    return None
+
+
+def help_command():
+    lines = [
+        "ls [путь]        показать содержимое каталога или имя файла",
+        "cd [путь]        перейти в каталог",
+        "rev путь         вывести файл с развёрнутыми строками",
+        "tree [путь]      показать дерево каталогов",
+        "touch путь       создать пустой файл",
+        "vfs-save путь    сохранить VFS в CSV-файл",
+        "help             показать эту справку",
+        "exit             выйти из эмулятора",
+    ]
+    return "\n".join(lines)
+
+
 def execute(command, args, vfs, state):
     if command == "":
         return None
@@ -185,13 +230,12 @@ def execute(command, args, vfs, state):
         return rev_command(vfs, state["cwd"], args)
     if command == "tree":
         return tree_command(vfs, state["cwd"], args)
+    if command == "touch":
+        return touch_command(vfs, state["cwd"], args)
     if command == "vfs-save":
-        if not args:
-            return "vfs-save: укажите путь для сохранения"
-        if vfs is None:
-            return "vfs-save: VFS не загружена"
-        save_vfs(vfs, args[0])
-        return f"vfs-save: сохранено в {args[0]}"
+        return vfs_save_command(vfs, args)
+    if command == "help":
+        return help_command()
     return f"{command}: команда не найдена"
 
 

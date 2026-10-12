@@ -102,6 +102,56 @@ def test_execute_tree():
     assert "summary.txt" in result
 
 
+def test_execute_touch_creates_file():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/docs"}
+    result = execute("touch", ["new.txt"], vfs, state)
+    assert result is None
+    assert vfs["/docs/new.txt"] == {"type": "file", "content": b""}
+
+
+def test_execute_touch_existing_keeps_content():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    execute("touch", ["top.txt"], vfs, state)
+    assert vfs["/top.txt"]["content"] == b"top"
+
+
+def test_execute_touch_missing_parent():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    result = execute("touch", ["nodir/new.txt"], vfs, state)
+    assert "не найден" in result
+    assert "/nodir/new.txt" not in vfs
+
+
+def test_execute_touch_parent_is_file():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    result = execute("touch", ["top.txt/new.txt"], vfs, state)
+    assert "не каталог" in result
+
+
+def test_execute_touch_no_args():
+    result = execute("touch", [], make_sample_vfs(), {"cwd": "/"})
+    assert "укажите" in result
+
+
+def test_execute_touch_then_ls():
+    vfs = make_sample_vfs()
+    state = {"cwd": "/"}
+    execute("touch", ["fresh.txt"], vfs, state)
+    result = execute("ls", [], vfs, state)
+    assert "fresh.txt" in result
+
+
+def test_execute_help_lists_commands():
+    result = execute("help", [], None, {"cwd": "/"})
+    names = ("ls", "cd", "rev", "tree", "touch", "vfs-save", "help", "exit")
+    for name in names:
+        assert name in result
+
+
 def test_execute_unknown():
     result = execute("blabla", [], None, {"cwd": "/"})
     assert "не найдена" in result
@@ -177,6 +227,13 @@ if __name__ == "__main__":
         test_execute_cd_not_found,
         test_execute_rev,
         test_execute_tree,
+        test_execute_touch_creates_file,
+        test_execute_touch_existing_keeps_content,
+        test_execute_touch_missing_parent,
+        test_execute_touch_parent_is_file,
+        test_execute_touch_no_args,
+        test_execute_touch_then_ls,
+        test_execute_help_lists_commands,
         test_execute_unknown,
         test_load_vfs_missing_file,
         test_load_vfs_bad_format,

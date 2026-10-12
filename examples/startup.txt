@@ -1,5 +1,7 @@
+help
 ls
 cd docs
+touch notes.txt
 ls
 unknown_command
 cd ..

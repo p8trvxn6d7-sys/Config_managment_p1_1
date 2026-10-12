@@ -1,0 +1,13 @@
+help
+ls
+cd docs
+touch notes.txt
+ls
+touch missing/new.txt
+touch
+unknown_command
+cd ..
+rev readme.txt
+tree
+vfs-save output/vfs_stage5.csv
+exit
